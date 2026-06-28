@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>2026 World Cup Simulation — 100,000 Timelines</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: #0f1117;
+      color: #e8e8e8;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    .header {
+      margin-bottom: 2rem;
+    }
+
+    .header h1 {
+      font-size: 22px;
+      font-weight: 600;
+      color: #ffffff;
+      line-height: 1.3;
+      margin-bottom: 6px;
+    }
+
+    .header p {
+      font-size: 13px;
+      color: #888;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 1.25rem;
+    }
+
+    .ctrl-btn {
+      font-size: 12px;
+      padding: 5px 14px;
+      cursor: pointer;
+      border-radius: 20px;
+      border: 1px solid #333;
+      background: transparent;
+      color: #aaa;
+      transition: all 0.15s ease;
+    }
+
+    .ctrl-btn:hover { border-color: #555; color: #ddd; }
+
+    .ctrl-btn.active {
+      background: #1e2030;
+      color: #fff;
+      border-color: #555;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-bottom: 1.5rem;
+    }
+
+    .leg-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: #777;
+    }
+
+    .leg-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 5px;
+    }
+
+    .team-name {
+      font-size: 13px;
+      color: #ddd;
+      width: 148px;
+      text-align: right;
+      flex-shrink: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .bar-track {
+      flex: 1;
+      height: 24px;
+      background: #1e2030;
+      border-radius: 4px;
+      overflow: visible;
+      position: relative;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .bar-val-inside {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 11px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.85);
+    }
+
+    .bar-val-outside {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 11px;
+      font-weight: 500;
+      color: #888;
+      white-space: nowrap;
+    }
+
+    .rank-badge {
+      width: 22px;
+      font-size: 12px;
+      text-align: left;
+      flex-shrink: 0;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #1e2030;
+      margin: 10px 0;
+    }
+
+    .footer {
+      margin-top: 2.5rem;
+      font-size: 11px;
+      color: #555;
+      line-height: 1.6;
+      border-top: 1px solid #1e2030;
+      padding-top: 1rem;
+    }
+
+    .footer a {
+      color: #666;
+    }
+
+    @media (max-width: 500px) {
+      .team-name { width: 110px; font-size: 12px; }
+      .header h1 { font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>2026 World Cup — Who wins the bracket?</h1>
+    <p>100,000 Monte Carlo simulations · Dual-Poisson xG model · Click a stage to explore</p>
+  </div>
+
+  <div class="controls" id="controls">
+    <button class="ctrl-btn active" onclick="setStage('Winner', this)">🏆 Champion</button>
+    <button class="ctrl-btn" onclick="setStage('Final', this)">Reach final</button>
+    <button class="ctrl-btn" onclick="setStage('SF', this)">Reach semis</button>
+    <button class="ctrl-btn" onclick="setStage('QF', this)">Reach quarters</button>
+    <button class="ctrl-btn" onclick="setStage('R16', this)">Win R32</button>
+  </div>
+
+  <div class="legend" id="legend"></div>
+  <div id="chart"></div>
+
+  <div class="footer">
+    Methodology: Dual-Poisson xG ensemble (50× bootstrapped HistGradientBoostingRegressors, Poisson loss) trained on international match data 2010–2023 with time-based train/test split. Features: Elo point differential, rank differential, stake flag, neutral ground flag, 5-match rolling form. Bracket simulated 100,000 times with per-match Elo momentum updates. Penalty model: logistic regression with isotonic calibration trained on 678 historical shootouts (ROC-AUC 0.558).
+  </div>
+
+</div>
+
+<script>
+const data = [
+  { team: 'France',        flag: '🇫🇷', R16:73.7, QF:42.5, SF:27.9, Final:16.3, Winner:9.4  },
+  { team: 'Argentina',     flag: '🇦🇷', R16:68.7, QF:48.0, SF:29.1, Final:16.6, Winner:9.3  },
+  { team: 'Spain',         flag: '🇪🇸', R16:63.9, QF:37.5, SF:25.2, Final:14.6, Winner:8.4  },
+  { team: 'Colombia',      flag: '🇨🇴', R16:79.3, QF:47.8, SF:25.0, Final:12.8, Winner:6.6  },
+  { team: 'England',       flag: '🏴󠁧󠁢󠁥󠁮󠁧󠁿', R16:71.3, QF:37.6, SF:20.8, Final:11.5, Winner:6.2  },
+  { team: 'Brazil',        flag: '🇧🇷', R16:57.5, QF:36.7, SF:20.4, Final:11.6, Winner:6.1  },
+  { team: 'Portugal',      flag: '🇵🇹', R16:61.1, QF:30.8, SF:20.7, Final:10.9, Winner:5.8  },
+  { team: 'Mexico',        flag: '🇲🇽', R16:69.6, QF:40.5, SF:18.6, Final:10.9, Winner:5.1  },
+  { team: 'Netherlands',   flag: '🇳🇱', R16:58.1, QF:35.2, SF:18.8, Final:10.0, Winner:5.0  },
+  { team: 'Germany',       flag: '🇩🇪', R16:65.0, QF:32.1, SF:18.1, Final:9.2,  Winner:4.4  },
+  { team: 'Norway',        flag: '🇳🇴', R16:61.9, QF:26.7, SF:13.8, Final:7.1,  Winner:3.5  },
+  { team: 'Switzerland',   flag: '🇨🇭', R16:68.7, QF:31.4, SF:16.0, Final:6.8,  Winner:3.3  },
+  { team: 'Japan',         flag: '🇯🇵', R16:42.5, QF:25.1, SF:12.6, Final:6.4,  Winner:3.0  },
+  { team: 'Belgium',       flag: '🇧🇪', R16:58.1, QF:31.9, SF:12.9, Final:6.0,  Winner:2.7  },
+  { team: 'Croatia',       flag: '🇭🇷', R16:38.9, QF:18.0, SF:10.8, Final:5.2,  Winner:2.5  },
+  { team: 'Canada',        flag: '🇨🇦', R16:66.3, QF:29.5, SF:9.7,  Final:4.7,  Winner:2.2  },
+  { team: 'USA',           flag: '🇺🇸', R16:76.3, QF:36.8, SF:12.2, Final:4.6,  Winner:2.2  },
+  { team: 'Morocco',       flag: '🇲🇦', R16:41.9, QF:24.4, SF:10.4, Final:4.9,  Winner:2.1  },
+  { team: 'Ecuador',       flag: '🇪🇨', R16:30.4, QF:14.8, SF:6.6,  Final:3.4,  Winner:1.6  },
+  { team: 'Senegal',       flag: '🇸🇳', R16:41.9, QF:22.8, SF:8.4,  Final:3.6,  Winner:1.5  },
+  { team: 'Paraguay',      flag: '🇵🇾', R16:35.0, QF:16.3, SF:7.7,  Final:3.3,  Winner:1.4  },
+  { team: 'Australia',     flag: '🇦🇺', R16:56.7, QF:23.0, SF:10.1, Final:3.6,  Winner:1.4  },
+  { team: 'Austria',       flag: '🇦🇹', R16:36.1, QF:13.6, SF:7.3,  Final:3.2,  Winner:1.4  },
+  { team: 'Algeria',       flag: '🇩🇿', R16:31.3, QF:15.4, SF:6.5,  Final:2.3,  Winner:0.9  },
+  { team: 'Egypt',         flag: '🇪🇬', R16:43.3, QF:16.9, SF:7.2,  Final:2.3,  Winner:0.8  },
+  { team: "Côte d'Ivoire", flag: '🇨🇮', R16:38.2, QF:11.4, SF:4.8,  Final:2.1,  Winner:0.8  },
+  { team: 'Sweden',        flag: '🇸🇪', R16:26.3, QF:9.2,  SF:4.5,  Final:1.8,  Winner:0.8  },
+  { team: 'Cabo Verde',    flag: '🇨🇻', R16:31.3, QF:12.1, SF:4.5,  Final:1.3,  Winner:0.4  },
+  { team: 'Congo DR',      flag: '🇨🇩', R16:28.7, QF:7.0,  SF:2.3,  Final:1.0,  Winner:0.4  },
+  { team: 'South Africa',  flag: '🇿🇦', R16:33.7, QF:10.9, SF:2.8,  Final:0.9,  Winner:0.3  },
+  { team: 'Bosnia',        flag: '🇧🇦', R16:23.7, QF:8.5,  SF:2.6,  Final:0.8,  Winner:0.3  },
+  { team: 'Ghana',         flag: '🇬🇭', R16:20.7, QF:5.4,  SF:1.5,  Final:0.4,  Winner:0.1  },
+];
+
+const stageColors = {
+  Winner: '#2a78d6',
+  Final:  '#1baf7a',
+  SF:     '#d4840a',
+  QF:     '#7c5cbf',
+  R16:    '#667085',
+};
+
+const stageLabels = {
+  Winner: 'Win the World Cup',
+  Final:  'Reach the final',
+  SF:     'Reach the semi-finals',
+  QF:     'Reach the quarter-finals',
+  R16:    'Win the round of 32',
+};
+
+let currentStage = 'Winner';
+
+function setStage(stage, btn) {
+  currentStage = stage;
+  document.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+function render() {
+  const sorted = [...data].sort((a, b) => b[currentStage] - a[currentStage]);
+  const max = sorted[0][currentStage];
+  const color = stageColors[currentStage];
+
+  // Legend
+  document.getElementById('legend').innerHTML = Object.entries(stageLabels).map(([s, label]) => `
+    <span class="leg-item">
+      <span class="leg-swatch" style="background:${stageColors[s]}"></span>
+      ${label}
+    </span>`).join('');
+
+  // Chart
+  document.getElementById('chart').innerHTML = sorted.map((d, i) => {
+    const val = d[currentStage];
+    const widthPct = (val / max * 100).toFixed(2);
+    const isWide = val / max > 0.28;
+    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
+
+    const valHtml = isWide
+      ? `<span class="bar-val-inside">${val.toFixed(1)}%</span>`
+      : `<span class="bar-val-outside" style="left:calc(${widthPct}% + 8px)">${val.toFixed(1)}%</span>`;
+
+    const dividerHtml = i === 9 ? '<hr class="divider">' : '';
+
+    return `
+      ${dividerHtml}
+      <div class="bar-row">
+        <span class="team-name">${d.flag} ${d.team}</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${widthPct}%;background:${color}"></div>
+          ${valHtml}
+        </div>
+        <span class="rank-badge">${medal}</span>
+      </div>`;
+  }).join('');
+}
+
+render();
+</script>
+</body>
+</html>
